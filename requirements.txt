@@ -1,0 +1,7 @@
+streamlit
+yfinance
+numpy
+matplotlib
+scipy
+arch
+streamlit-option-menu
