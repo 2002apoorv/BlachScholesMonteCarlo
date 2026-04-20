@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from streamlit_option_menu import option_menu
 from arch import arch_model
 from scipy.stats import norm
+import pandas as pd
+import time
 
 plt.style.use("seaborn-v0_8")
 
@@ -58,29 +60,44 @@ if selected == "Options Dashboard":
 
     if run_model:
 
-        data = yf.download(ticker, start="2020-01-01")
+        data = yf.download(ticker, start="2020-01-01", progress=False)
+        st.write("Columns:", data.columns)
 
+# Fix column issue (important for Streamlit Cloud)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+# Retry if empty (cloud fix)
         if data.empty:
-            st.error("Invalid ticker or no data available")
-        else:
+            time.sleep(2)
+            data = yf.download(ticker, start="2020-01-01", progress=False)
 
-            returns = np.log(data["Close"] / data["Close"].shift(1)).dropna()
+# Final check
+        if data.empty or "Close" not in data.columns:
+            st.error("Failed to fetch data. Try AAPL, TSLA, RELIANCE.NS")
+            st.stop()
 
-            model = arch_model(returns * 100, vol="Garch", p=1, q=1)
-            result = model.fit(disp="off")
+        returns = np.log(data["Close"] / data["Close"].shift(1)).dropna()
 
-            forecast = result.forecast(horizon=1)
+        model = arch_model(returns * 100, vol="Garch", p=1, q=1)
+        result = model.fit(disp="off")
 
-            predicted_vol_daily = np.sqrt(forecast.variance.values[-1, :][0]) / 100
-            sigma = predicted_vol_daily * np.sqrt(252)
+        forecast = result.forecast(horizon=1)
 
-            S = float(data["Close"].iloc[-1])
+        predicted_vol_daily = np.sqrt(forecast.variance.values[-1, :][0]) / 100
+        sigma = predicted_vol_daily * np.sqrt(252)
 
-            # store results so UI can update without rerunning model
-            st.session_state["data"] = data
-            st.session_state["sigma"] = sigma
-            st.session_state["S"] = S
-            st.session_state["model_run"] = True
+        try:
+            S = float(data["Close"].dropna().iloc[-1])
+        except:
+            st.error("Error reading stock price")
+            st.stop()
+
+        # store results so UI can update without rerunning model
+        st.session_state["data"] = data
+        st.session_state["sigma"] = sigma
+        st.session_state["S"] = S
+        st.session_state["model_run"] = True
 
     # -----------------------
     # IF MODEL HAS BEEN RUN
