@@ -2,6 +2,8 @@ streamlit
 yfinance
 numpy
 matplotlib
+pandas
 scipy
 arch
 streamlit-option-menu
+streamlit-autorefresh
