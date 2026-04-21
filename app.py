@@ -7,6 +7,10 @@ from arch import arch_model
 from scipy.stats import norm
 import pandas as pd
 import time
+from streamlit_autorefresh import st_autorefresh
+import plotly.graph_objects as go
+
+st_autorefresh(interval=60000)  # refresh every 60 seconds
 
 plt.style.use("seaborn-v0_8")
 
@@ -15,12 +19,159 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("📈 Options Analytics Dashboard")
+st.markdown("""
+<style>
+/* TradingView Dark Theme Colors */
+:root {
+    --tv-bg: #131722;
+    --tv-panel-bg: #1e222d;
+    --tv-border: #2a2e39;
+    --tv-text: #d1d4dc;
+    --tv-text-muted: #8a919e;
+    --tv-up: #26a69a;
+    --tv-down: #ef5350;
+    --tv-blue: #2962ff;
+    --tv-hover: #2a2e39;
+}
+
+/* Base App Colors */
+[data-testid="stAppViewContainer"] {
+    background-color: var(--tv-bg);
+    color: var(--tv-text);
+}
+[data-testid="stHeader"] {
+    background-color: var(--tv-bg);
+}
+[data-testid="stSidebar"] {
+    background-color: var(--tv-panel-bg) !important;
+    border-right: 1px solid var(--tv-border) !important;
+}
+
+/* Hide Streamlit elements */
+#MainMenu {visibility: hidden;}
+.stDeployButton {display:none;}
+footer {visibility: hidden;}
+
+/* Custom padding */
+.block-container {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+    max-width: 98% !important;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6, p, span, div {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+    color: white !important;
+}
+
+/* Streamlit Metrics (Make them look like TV data windows) */
+[data-testid="stMetric"] {
+    background-color: var(--tv-panel-bg);
+    padding: 15px 20px;
+    border-radius: 8px;
+    border: 1px solid var(--tv-border);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+}
+[data-testid="stMetricLabel"] {
+    color: var(--tv-text-muted) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+}
+[data-testid="stMetricValue"] {
+    color: white !important;
+    font-size: 26px !important;
+    font-weight: 700 !important;
+}
+
+/* Tabs like TradingView */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0;
+    background-color: var(--tv-panel-bg);
+    border-bottom: 1px solid var(--tv-border);
+    border-radius: 8px 8px 0 0;
+    padding: 0 10px;
+}
+.stTabs [data-baseweb="tab"] {
+    height: 50px;
+    padding: 0 20px;
+    background-color: transparent;
+    border-radius: 0px;
+    color: var(--tv-text-muted);
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+}
+.stTabs [aria-selected="true"] {
+    color: var(--tv-blue) !important;
+    border-bottom: 3px solid var(--tv-blue) !important;
+    background-color: transparent !important;
+}
+
+/* Inputs & Buttons */
+.stTextInput>div>div>input, .stNumberInput>div>div>input {
+    background-color: var(--tv-bg) !important;
+    color: white !important;
+    border: 1px solid var(--tv-border) !important;
+}
+.stButton>button {
+    background-color: var(--tv-blue) !important;
+    color: white !important;
+    border-radius: 4px !important;
+    border: none !important;
+    width: 100%;
+    font-weight: bold;
+    height: 40px;
+    transition: background-color 0.2s ease;
+}
+.stButton>button:hover {
+    background-color: #1e4bd8 !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div style='background-color: var(--tv-panel-bg); padding: 15px 25px; border-radius: 8px; border: 1px solid var(--tv-border); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;'>
+    <div style='display: flex; align-items: center; gap: 15px;'>
+        <div style='background-color: var(--tv-blue); width: 45px; height: 45px; border-radius: 8px; display: flex; justify-content: center; align-items: center; font-size: 22px;'>📈</div>
+        <div>
+            <h1 style='margin: 0; font-size: 22px;'>Options Analytics Dashboard</h1>
+            <p style='margin: 0; color: var(--tv-text-muted); font-size: 14px;'>Real-time pricing • Monte Carlo simulation • Risk analysis</p>
+        </div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("---")
+
+
 st.caption("Volatility Modeling and Option Pricing")
 
 # -----------------------
 # SIDEBAR NAVIGATION
 # -----------------------
+
+popular_stocks = ["AAPL", "TSLA", "MSFT", "GOOGL", "AMZN"]
+
+def get_live_price(ticker):
+    try:
+        data = yf.download(ticker, period="1d", interval="1m", progress=False)
+        if not data.empty:
+            close_vals = data["Close"]
+            if isinstance(close_vals, pd.DataFrame):
+                return float(close_vals.iloc[-1, 0])
+            return float(close_vals.iloc[-1])
+    except Exception:
+        pass
+    return None
+
+
 
 with st.sidebar:
 
@@ -31,6 +182,25 @@ with st.sidebar:
         menu_icon="cast",
         default_index=0,
     )
+    st.sidebar.markdown("### 📊 Live Market")
+
+    for stock in popular_stocks:
+        price = get_live_price(stock)
+        
+        if price:
+            st.sidebar.markdown(f"""
+            <div style="
+                background-color:#1e222d;
+                padding:10px;
+                border-radius:8px;
+                margin-bottom:8px;
+                border: 1px solid #2a2e39;
+            ">
+                <b style="color:white;">{stock}</b><br>
+                <span style="color:#26a69a;">${price:.2f}</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
 
 # -----------------------
 # OPTIONS DASHBOARD PAGE
@@ -38,10 +208,19 @@ with st.sidebar:
 
 if selected == "Options Dashboard":
 
-    st.sidebar.header("Model Inputs")
-
-    ticker = st.sidebar.text_input("Stock Ticker", "TSLA")
-
+    # -----------------------
+    # SIDEBAR ORGANIZATION
+    # -----------------------
+    
+    st.sidebar.header("⚙️ Model Controls")
+    
+    st.sidebar.subheader("📊 Stock Selection")
+    ticker = st.sidebar.text_input(
+        "Stock Ticker",
+        st.session_state.get("selected_stock", "TSLA")
+    )
+    
+    st.sidebar.subheader("📈 Model Parameters")
     time_to_maturity = st.sidebar.number_input(
         "Time to Maturity (years)",
         value=0.5
@@ -61,7 +240,7 @@ if selected == "Options Dashboard":
     if run_model:
 
         data = yf.download(ticker, start="2020-01-01", progress=False)
-        st.write("Columns:", data.columns)
+        # st.write("Columns:", data.columns)
 
 # Fix column issue (important for Streamlit Cloud)
         if isinstance(data.columns, pd.MultiIndex):
@@ -88,9 +267,13 @@ if selected == "Options Dashboard":
         sigma = predicted_vol_daily * np.sqrt(252)
 
         try:
-            S = float(data["Close"].dropna().iloc[-1])
-        except:
-            st.error("Error reading stock price")
+            close_vals = data["Close"].dropna()
+            if isinstance(close_vals, pd.DataFrame):
+                S = float(close_vals.iloc[-1, 0])
+            else:
+                S = float(close_vals.iloc[-1])
+        except Exception as e:
+            st.error(f"Error reading stock price: {e}")
             st.stop()
 
         # store results so UI can update without rerunning model
@@ -164,14 +347,37 @@ if selected == "Options Dashboard":
 
         with tab1:
 
-            fig, ax = plt.subplots()
+            fig = go.Figure(data=[go.Candlestick(x=data.index,
+                            open=data['Open'],
+                            high=data['High'],
+                            low=data['Low'],
+                            close=data['Close'],
+                            increasing_line_color='#26a69a', increasing_fillcolor='#26a69a',
+                            decreasing_line_color='#ef5350', decreasing_fillcolor='#ef5350')])
+            
+            fig.update_layout(
+                template='plotly_dark',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=10, b=0),
+                xaxis_rangeslider_visible=False,
+                xaxis=dict(
+                    showgrid=True,
+                    gridcolor='#2a2e39',
+                    tickfont=dict(color='#d1d4dc'),
+                    title=''
+                ),
+                yaxis=dict(
+                    showgrid=True,
+                    gridcolor='#2a2e39',
+                    tickfont=dict(color='#d1d4dc'),
+                    title='',
+                    side='right'
+                ),
+                height=400
+            )
 
-            ax.plot(data["Close"])
-
-            ax.set_xlabel("Date")
-            ax.set_ylabel("Price")
-
-            st.pyplot(fig)
+            st.plotly_chart(fig, use_container_width=True)
 
             c1, c2, c3 = st.columns(3)
 
@@ -194,14 +400,17 @@ if selected == "Options Dashboard":
                 q=1
             ).fit(disp="off").conditional_volatility
 
-            fig2, ax2 = plt.subplots()
-
-            ax2.plot(volatility)
-
-            ax2.set_xlabel("Time")
-            ax2.set_ylabel("Volatility")
-
-            st.pyplot(fig2)
+            fig2 = go.Figure(data=go.Scatter(x=volatility.index, y=volatility, mode='lines', line=dict(color='#2962ff', width=2)))
+            fig2.update_layout(
+                template='plotly_dark',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=10, b=0),
+                xaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#d1d4dc'), title='Time'),
+                yaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#d1d4dc'), title='Volatility', side='right'),
+                height=400
+            )
+            st.plotly_chart(fig2, use_container_width=True)
 
         # -----------------------
         # GREEKS TAB
@@ -247,20 +456,24 @@ if selected == "Options Dashboard":
             call_payoff = np.maximum(stock_prices-strike_price,0)-call_price
             put_payoff = np.maximum(strike_price-stock_prices,0)-put_price
 
-            fig3, ax3 = plt.subplots()
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=stock_prices, y=call_payoff, mode='lines', name='Call Payoff', line=dict(color='#26a69a', width=2)))
+            fig3.add_trace(go.Scatter(x=stock_prices, y=put_payoff, mode='lines', name='Put Payoff', line=dict(color='#ef5350', width=2)))
+            
+            fig3.add_hline(y=0, line_color="#666666", line_width=1)
+            fig3.add_vline(x=strike_price, line_dash="dash", line_color="#2962ff", line_width=1)
 
-            ax3.plot(stock_prices,call_payoff,label="Call Payoff")
-            ax3.plot(stock_prices,put_payoff,label="Put Payoff")
-
-            ax3.axhline(0)
-            ax3.axvline(strike_price,linestyle="--")
-
-            ax3.set_xlabel("Stock Price at Expiration")
-            ax3.set_ylabel("Profit / Loss")
-
-            ax3.legend()
-
-            st.pyplot(fig3)
+            fig3.update_layout(
+                template='plotly_dark',
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=10, b=0),
+                xaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#d1d4dc'), title='Stock Price at Expiration'),
+                yaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#d1d4dc'), title='Profit / Loss', side='right'),
+                height=400,
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0)", font=dict(color="white"))
+            )
+            st.plotly_chart(fig3, use_container_width=True)
 
         # -----------------------
         # IMPLIED VOL TAB
@@ -308,87 +521,43 @@ if selected == "Options Dashboard":
 
         with tab6:
 
-            st.subheader("Monte Carlo Simulation (Future Price Paths)")
+            st.markdown("<h2 style='color: white; margin-bottom: 0px;'>🎲 Monte Carlo Simulation Analysis</h2>", unsafe_allow_html=True)
+            st.markdown("<p style='color: #8a919e; font-size: 14px;'>Simulate thousands of possible future price paths using Geometric Brownian Motion.</p>", unsafe_allow_html=True)
+            st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
 
-            n_simulations = st.slider("Number of Simulations", 100, 2000, 300)
+            # Top Controls Row
+            ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([1, 1, 1])
+            with ctrl_col1:
+                n_simulations = st.slider("Number of Simulations", 10, 2000, 500, step=50)
+            
+            # --- Calculation ---
             steps = 252  # daily steps for 1 year
             dt = time_to_maturity / steps
 
             paths = []
-
             for _ in range(n_simulations // 2):
-
                 prices1 = [S]
                 prices2 = [S]
-
                 for _ in range(steps):
-
                     shock = np.random.normal(0, 1)
-
                     shock_antithetic = -shock
-
-                    price1 = prices1[-1] * np.exp(
-                        (risk_free_rate - 0.5 * sigma**2) * dt
-                        + sigma * np.sqrt(dt) * shock
-                    )
-
-                    price2 = prices2[-1] * np.exp(
-                        (risk_free_rate - 0.5 * sigma**2) * dt
-                        + sigma * np.sqrt(dt) * shock_antithetic
-                    )
-
+                    price1 = prices1[-1] * np.exp((risk_free_rate - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * shock)
+                    price2 = prices2[-1] * np.exp((risk_free_rate - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * shock_antithetic)
                     prices1.append(price1)
                     prices2.append(price2)
-
                 paths.append(prices1)
                 paths.append(prices2)
 
             if len(paths) < n_simulations:
                 paths.append(paths[-1])
-            # -----------------------
-            # FINAL PRICE DISTRIBUTION
-            # -----------------------
             
             final_prices = np.array([path[-1] for path in paths])
             
             mc_prices = []
-
             for i in range(50, len(final_prices), 50):
                 temp_payoffs = np.maximum(final_prices[:i] - strike_price, 0)
                 temp_price = np.exp(-risk_free_rate*time_to_maturity) * np.mean(temp_payoffs)
                 mc_prices.append(temp_price)
-
-            fig_conv, ax_conv = plt.subplots()
-            ax_conv.plot(range(50, len(final_prices), 50), mc_prices)
-
-            ax_conv.set_title("Monte Carlo Convergence")
-            ax_conv.set_xlabel("Number of Simulations")
-            ax_conv.set_ylabel("Option Price")
-
-            st.pyplot(fig_conv)
-            
-            
-
-            # -----------------------
-            # PLOT SIMULATED PATHS
-            # -----------------------
-
-            fig_mc, ax_mc = plt.subplots()
-
-            for path in paths:
-                ax_mc.plot(path, alpha=0.3)
-
-            ax_mc.set_title("Simulated Future Price Paths")
-            ax_mc.set_xlabel("Time Steps")
-            ax_mc.set_ylabel("Stock Price")
-
-            st.pyplot(fig_mc)
-
-            
-
-            # -----------------------
-            # MONTE CARLO OPTION PRICING
-            # -----------------------
 
             call_payoffs = np.maximum(final_prices - strike_price, 0)
             put_payoffs = np.maximum(strike_price - final_prices, 0)
@@ -396,77 +565,132 @@ if selected == "Options Dashboard":
             mc_call_price = np.exp(-risk_free_rate * time_to_maturity) * np.mean(call_payoffs)
             mc_put_price = np.exp(-risk_free_rate * time_to_maturity) * np.mean(put_payoffs)
 
-            st.markdown("### 💰 Monte Carlo Pricing")
-
-            c1, c2 = st.columns(2)
-            c1.metric("MC Call Price", round(mc_call_price, 2))
-            c2.metric("MC Put Price", round(mc_put_price, 2))
-            
-            # -----------------------
-            # CONFIDENCE INTERVAL
-            # -----------------------
-
             std_error = np.std(call_payoffs) / np.sqrt(len(final_prices))
-
             ci_lower = mc_call_price - 1.96 * std_error
             ci_upper = mc_call_price + 1.96 * std_error
 
-            st.markdown("### 📊 Confidence Interval (95%)")
-
-            st.write(f"Call Price Range: [{ci_lower:.2f}, {ci_upper:.2f}]")
-            
-            # -----------------------
-            # COMPARISON WITH BLACK-SCHOLES
-            # -----------------------
-
-            st.markdown("### ⚖️ Comparison with Black-Scholes")
-
-            c3, c4 = st.columns(2)
-
-            c3.metric(
-            "Call Price Difference",
-            round(mc_call_price - call_price, 4)
-            )
-
-            c4.metric(
-            "Put Price Difference",
-            round(mc_put_price - put_price, 4)
-            )
-            
-            # -----------------------
-            # INTERPRETATION
-            # -----------------------
-
-            st.markdown("### 🧠 Interpretation")
-
             prob_above_strike = np.mean(final_prices > strike_price)
 
-            if prob_above_strike > 0.65:
-                st.success("High probability of profit (Call option favorable)")
+            with ctrl_col2:
+                st.markdown(f"""
+                <div style="background-color:#1e222d; padding:15px; border-radius:8px; border: 1px solid #2a2e39;">
+                    <div style="color:#8a919e; font-size:12px; font-weight:600; text-transform:uppercase;">MC Call Price</div>
+                    <div style="color:#26a69a; font-size:24px; font-weight:bold;">${mc_call_price:.2f}</div>
+                    <div style="color:#d1d4dc; font-size:12px;">95% CI: [{ci_lower:.2f}, {ci_upper:.2f}]</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            elif prob_above_strike > 0.45:
-                st.warning("Moderate probability (Risk involved)")
+            with ctrl_col3:
+                st.markdown(f"""
+                <div style="background-color:#1e222d; padding:15px; border-radius:8px; border: 1px solid #2a2e39;">
+                    <div style="color:#8a919e; font-size:12px; font-weight:600; text-transform:uppercase;">MC Put Price</div>
+                    <div style="color:#ef5350; font-size:24px; font-weight:bold;">${mc_put_price:.2f}</div>
+                    <div style="color:#d1d4dc; font-size:12px;">Diff vs BS: ${(mc_put_price - put_price):.4f}</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-            else:
-                st.error("Low probability of profit")
+            st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-            fig_hist, ax_hist = plt.subplots()
-            ax_hist.hist(final_prices, bins=30)
+            # Chart Row 1
+            c1, c2 = st.columns([2, 1])
 
-            ax_hist.set_title("Distribution of Final Prices")
-            ax_hist.set_xlabel("Final Price")
-            ax_hist.set_ylabel("Frequency")
+            with c1:
+                st.markdown("<h4 style='color: #d1d4dc; margin-bottom: 10px; font-size: 16px;'>🎯 Simulation Paths</h4>", unsafe_allow_html=True)
+                fig_mc = go.Figure()
+                # Limit paths for performance/visibility
+                display_paths = paths[:200] if len(paths) > 200 else paths
+                for path in display_paths: 
+                    fig_mc.add_trace(go.Scatter(y=path, mode='lines', line=dict(color='#2962ff', width=1), opacity=0.05, showlegend=False))
+                
+                # Add strike price line
+                fig_mc.add_hline(y=strike_price, line_dash="dash", line_color="#ef5350", annotation_text="Strike", annotation_position="bottom right", annotation_font_color="#ef5350")
+                
+                fig_mc.update_layout(
+                    template='plotly_dark',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    xaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='Trading Days'),
+                    yaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='Stock Price', side='right'),
+                    height=350
+                )
+                st.plotly_chart(fig_mc, use_container_width=True)
 
-            st.pyplot(fig_hist)
+            with c2:
+                st.markdown("<h4 style='color: #d1d4dc; margin-bottom: 10px; font-size: 16px;'>📊 Price Distribution</h4>", unsafe_allow_html=True)
+                fig_hist = go.Figure(data=[go.Histogram(x=final_prices, nbinsx=40, marker_color='#26a69a', opacity=0.8, marker_line_width=1, marker_line_color='#1e222d')])
+                fig_hist.add_vline(x=strike_price, line_dash="dash", line_color="#ef5350", line_width=2)
+                fig_hist.update_layout(
+                    template='plotly_dark',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    xaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='Final Price'),
+                    yaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='', showticklabels=False),
+                    height=350
+                )
+                st.plotly_chart(fig_hist, use_container_width=True)
 
-            # -----------------------
-            # METRICS
-            # -----------------------
+            st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-            st.metric("Average Final Price", round(np.mean(final_prices), 2))
+            # Chart Row 2
+            c3, c4 = st.columns([2, 1])
 
-            prob_above_strike = np.mean(final_prices > strike_price)
-            st.metric("Probability Price > Strike", round(prob_above_strike, 2))
+            with c3:
+                st.markdown("<h4 style='color: #d1d4dc; margin-bottom: 10px; font-size: 16px;'>🔄 Convergence Analysis</h4>", unsafe_allow_html=True)
+                fig_conv = go.Figure(data=[go.Scatter(x=list(range(50, len(final_prices), 50)), y=mc_prices, mode='lines', line=dict(color='#2962ff', width=2))])
+                # Add BS Price line for reference
+                fig_conv.add_hline(y=call_price, line_dash="dash", line_color="#26a69a", annotation_text="BS Call Price", annotation_position="top right", annotation_font_color="#26a69a")
+                
+                fig_conv.update_layout(
+                    template='plotly_dark',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    xaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='Simulations'),
+                    yaxis=dict(showgrid=True, gridcolor='#2a2e39', tickfont=dict(color='#8a919e'), title='Option Price', side='right'),
+                    height=300
+                )
+                st.plotly_chart(fig_conv, use_container_width=True)
+
+            with c4:
+                st.markdown("<h4 style='color: #d1d4dc; margin-bottom: 10px; font-size: 16px;'>🧠 Insights & Stats</h4>", unsafe_allow_html=True)
+                
+                if prob_above_strike > 0.65:
+                    insight_msg = "High probability of profit at expiration."
+                    insight_color = "#26a69a"
+                    bg_color = "rgba(38, 166, 154, 0.1)"
+                elif prob_above_strike > 0.45:
+                    insight_msg = "Moderate probability of profit."
+                    insight_color = "#FFD700"
+                    bg_color = "rgba(255, 215, 0, 0.1)"
+                else:
+                    insight_msg = "Low probability of profit at expiration."
+                    insight_color = "#ef5350"
+                    bg_color = "rgba(239, 83, 80, 0.1)"
+
+                st.markdown(f"""
+                <div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border-left: 4px solid {insight_color}; border-top: 1px solid #2a2e39; border-right: 1px solid #2a2e39; border-bottom: 1px solid #2a2e39; margin-bottom: 15px;'>
+                    <div style='color: {insight_color}; font-weight: bold; font-size: 14px; margin-bottom: 5px;'>Probability ITM</div>
+                    <div style='color: white; font-size: 24px; font-weight: bold;'>{prob_above_strike * 100:.1f}%</div>
+                    <div style='color: #8a919e; font-size: 12px; margin-top: 5px;'>{insight_msg}</div>
+                </div>
+                
+                <div style="background-color:#1e222d; padding:15px; border-radius:8px; border: 1px solid #2a2e39;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="color:#8a919e; font-size:13px;">Avg Final Price</span>
+                        <span style="color:white; font-size:13px; font-weight:bold;">${np.mean(final_prices):.2f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                        <span style="color:#8a919e; font-size:13px;">Call Diff (vs BS)</span>
+                        <span style="color:{'#26a69a' if (mc_call_price - call_price) >= 0 else '#ef5350'}; font-size:13px; font-weight:bold;">${(mc_call_price - call_price):.4f}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color:#8a919e; font-size:13px;">Put Diff (vs BS)</span>
+                        <span style="color:{'#26a69a' if (mc_put_price - put_price) >= 0 else '#ef5350'}; font-size:13px; font-weight:bold;">${(mc_put_price - put_price):.4f}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
 # -----------------------
 # VOLATILITY COMPARISON PAGE
