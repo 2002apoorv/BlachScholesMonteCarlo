@@ -7,3 +7,4 @@ scipy
 arch
 streamlit-option-menu
 streamlit-autorefresh
+plotly
